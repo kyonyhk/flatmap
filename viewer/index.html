@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Singapore HDB resale prices</title>
-  <meta name="description" content="Every HDB resale transaction since 1990 — nearly a million sales — on a 3D map of Singapore. Scrub through 36 years and watch estates rise." />
+  <title>flatmap — check any block before you buy or sell</title>
+  <meta name="description" content="What is any HDB block really worth? Every registered resale since 1990, at block and floor level, on a 3D map of Singapore. No listings, no ads." />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <!-- swap host for flatmap.sg once the domain is attached -->
-  <meta property="og:title" content="flatmap — Singapore HDB resale prices, 1990 to today" />
-  <meta property="og:description" content="Every HDB resale transaction since 1990 on a 3D map. Scrub through 36 years and watch estates rise." />
+  <meta property="og:title" content="flatmap — check any block before you buy or sell" />
+  <meta property="og:description" content="What is any HDB block really worth? Every registered resale since 1990, block by block, floor by floor, on a 3D map of Singapore." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://flatmap.vercel.app/" />
   <meta property="og:image" content="https://flatmap.vercel.app/og.png" />
@@ -111,30 +111,11 @@
       padding: 1px 7px;
     }
     #search-results .hit.cur, #search-results .hit:hover { background: rgba(255, 255, 255, 0.10); }
-    #hints {
-      position: absolute;
-      top: 64px;
-      right: 16px;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 6px;
-      z-index: 9;
+    #search-results .nores {
+      font-size: 10px;
+      color: var(--ink-muted);
+      padding: 6px 10px 4px;
     }
-    #hints.gone { display: none; }
-    #hints button {
-      background: var(--surface);
-      border: 1px solid var(--hairline);
-      border-radius: 999px;
-      backdrop-filter: blur(8px) saturate(1.15);
-      -webkit-backdrop-filter: blur(8px) saturate(1.15);
-      color: var(--ink-2);
-      font-size: 11px;
-      font-family: inherit;
-      padding: 7px 14px;
-      cursor: pointer;
-    }
-    #hints button:hover { color: var(--ink); background: rgba(50, 50, 48, 0.75); }
     #compass {
       position: absolute;
       bottom: 56px;
@@ -482,16 +463,11 @@
 </head>
 <body>
   <div id="map"></div>
-  <div id="title" class="chip"><strong>Singapore HDB resale prices</strong><span>1990 – today</span></div>
+  <div id="title" class="chip"><strong>flatmap</strong><span>check any block before you buy or sell</span></div>
   <div id="search" class="chip">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#898781" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/></svg>
     <input id="search-input" type="text" placeholder="Search, or ask about prices" autocomplete="off" spellcheck="false" />
     <div id="search-results"></div>
-  </div>
-  <div id="hints">
-    <button data-act="find">find your block</button>
-    <button data-act="play">watch 36 years</button>
-    <button data-act="afc">what happened in 1997?</button>
   </div>
   <button id="compass" aria-label="Reset north" title="Rotate: right-drag or Ctrl+drag (two fingers on touch). Click to face north.">
     <svg viewBox="0 0 24 24" width="20" height="20">

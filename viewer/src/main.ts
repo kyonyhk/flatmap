@@ -11,7 +11,7 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import { SolidPolygonLayer, PathLayer, TextLayer } from "@deck.gl/layers";
 import { EVENTS, type Era } from "./events";
 import { initPanel, showPanel, hidePanel } from "./panel";
-import { initSearch, type SearchPick, type AnswerItem } from "./search";
+import { initSearch, type SearchPick, type AnswerItem, type Suggestion } from "./search";
 import { parseQuery, hasConstraints, type Parsed } from "./query";
 import { RAMP, LUT } from "./ramp";
 import { DataFilterExtension } from "@deck.gl/extensions";
@@ -513,7 +513,6 @@ function update() {
 }
 
 function select(idx: number | null, fly = false) {
-  if (idx !== null) hideHints();
   selectedIdx = idx;
   if (idx === null) hidePanel();
   else {
@@ -532,7 +531,6 @@ function select(idx: number | null, fly = false) {
 }
 
 function eraJump(e: Era) {
-  hideHints();
   stop();
   curMonth = e.at;
   const sel = e.select !== undefined ? byPostal.get(e.select) ?? null : null;
@@ -598,13 +596,6 @@ initPanel({
   onClose: () => select(null),
   toast: showToast,
 });
-
-const hints = document.getElementById("hints")!;
-function hideHints() {
-  hints.classList.add("gone");
-  localStorage.setItem("sg-hints-seen", "1");
-}
-if (localStorage.getItem("sg-hints-seen")) hints.classList.add("gone");
 
 const ISLAND = { center: [103.82, 1.352] as [number, number], zoom: 11.2, pitch: 55, bearing: -12 };
 
@@ -695,7 +686,6 @@ function answers(q: string): AnswerItem[] {
 }
 
 function onSearchPick(p: SearchPick) {
-  hideHints();
   if (p.kind === "run") {
     p.run();
   } else if (p.kind === "block") {
@@ -712,6 +702,79 @@ function onSearchPick(p: SearchPick) {
     update();
   }
 }
+// Focus/zero-result suggestions: one example of everything the box can do,
+// shuffled per focus so the breadth shows over repeat visits.
+const SUGGESTION_POOL: Suggestion[] = [];
+{
+  const amk = byPostal.get("560121");
+  if (amk !== undefined) {
+    SUGGESTION_POOL.push({
+      label: "Blk 121 Ang Mo Kio Ave 3",
+      sub: "any block, by address or postal code",
+      badge: "block",
+      pick: { kind: "block", idx: amk },
+    });
+  }
+  const pg = meta.enums.towns.indexOf("PUNGGOL");
+  if (pg >= 0) {
+    SUGGESTION_POOL.push({
+      label: "Punggol",
+      sub: "fly to a town",
+      badge: "town",
+      pick: { kind: "town", town: pg },
+    });
+  }
+  SUGGESTION_POOL.push(
+    {
+      label: "1997",
+      sub: "jump the timeline to any year",
+      badge: "year",
+      pick: { kind: "year", year: 1997 },
+    },
+    {
+      label: "The first million-dollar flat",
+      sub: EVENTS[5].sub,
+      badge: "story",
+      pick: { kind: "era", era: 5 },
+    },
+    {
+      label: "highest price in Jurong in 2026",
+      sub: "ask about prices in plain words",
+      badge: "ask",
+      pick: { kind: "query", q: "highest price in jurong in 2026" },
+    },
+    {
+      label: "4-room under 600k in Punggol",
+      sub: "filter the island by budget",
+      badge: "ask",
+      pick: { kind: "query", q: "4 room under 600k in punggol" },
+    },
+    {
+      label: "Watch 36 years of Singapore",
+      sub: "play the timeline from 1990",
+      badge: "play",
+      pick: {
+        kind: "run",
+        run: () => {
+          select(null);
+          stop();
+          curMonth = 0;
+          map.flyTo({ ...ISLAND, duration: 2000 });
+          play();
+        },
+      },
+    },
+  );
+}
+const shuffledSuggestions = () => {
+  const a = [...SUGGESTION_POOL];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
 initSearch({
   buildings,
   towns: meta.enums.towns,
@@ -719,23 +782,7 @@ initSearch({
   maxYear: yearOf(meta.maxMonth),
   onPick: onSearchPick,
   answers,
-});
-
-hints.addEventListener("click", (e) => {
-  const act = (e.target as HTMLElement).dataset?.act;
-  if (!act) return;
-  if (act === "find") {
-    (document.getElementById("search-input") as HTMLInputElement).focus();
-  } else if (act === "play") {
-    hideHints();
-    select(null);
-    stop();
-    curMonth = 0;
-    map.flyTo({ ...ISLAND, duration: 2000 });
-    play();
-  } else if (act === "afc") {
-    eraJump(EVENTS[1]);
-  }
+  suggestions: shuffledSuggestions,
 });
 
 // Era captions are jump targets, same as the slider dots.

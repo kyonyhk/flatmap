@@ -9,12 +9,16 @@ export type SearchPick =
   | { kind: "town"; town: number }
   | { kind: "era"; era: number }
   | { kind: "year"; year: number }
-  | { kind: "run"; run: () => void };
+  | { kind: "run"; run: () => void }
+  | { kind: "query"; q: string }; // fills the box and searches — teaches the grammar
 
 type Item = { pick: SearchPick; label: string; sub: string; badge: string };
 
 // Computed answers (superlatives, filters) supplied by the host app.
 export type AnswerItem = { label: string; sub: string; badge: string; run: () => void };
+
+// Curated examples shown on focus and as the zero-results fallback.
+export type Suggestion = Item;
 
 // Users type full words; the data uses HDB abbreviations.
 const CONTRACTIONS: [RegExp, string][] = [
@@ -37,6 +41,7 @@ export function initSearch(opts: {
   maxYear: number;
   onPick: (p: SearchPick) => void;
   answers?: (q: string) => AnswerItem[];
+  suggestions?: () => Suggestion[];
 }) {
   const { buildings, towns, eras, maxYear, onPick } = opts;
   const input = document.getElementById("search-input") as HTMLInputElement;
@@ -44,6 +49,7 @@ export function initSearch(opts: {
   const byPostal = new Map(buildings.map((b, i) => [b.postal, i]));
   let items: Item[] = [];
   let cursor = -1;
+  let fallback = false; // showing suggestions because the query had no match
 
   const blockItem = (idx: number): Item => {
     const b = buildings[idx];
@@ -129,7 +135,10 @@ export function initSearch(opts: {
   }
 
   function render() {
-    list.innerHTML = items.map((it, i) => `
+    const head = fallback
+      ? `<div class="nores">no match — try one of these</div>`
+      : "";
+    list.innerHTML = head + items.map((it, i) => `
       <div class="hit${i === cursor ? " cur" : ""}" data-i="${i}">
         <div class="hit-main"><strong>${it.label}</strong><span>${it.sub}</span></div>
         <span class="hit-badge">${it.badge}</span>
@@ -137,7 +146,31 @@ export function initSearch(opts: {
     list.classList.toggle("open", items.length > 0);
   }
 
+  function computeItems(raw: string): Item[] {
+    const t = raw.trim();
+    if (!t) {
+      fallback = false;
+      return opts.suggestions?.() ?? [];
+    }
+    const found = find(raw);
+    if (found.length) {
+      fallback = false;
+      return found;
+    }
+    fallback = t.length >= 3 && !!opts.suggestions;
+    return fallback ? opts.suggestions!() : [];
+  }
+
   function pick(it: Item) {
+    if (it.pick.kind === "query") {
+      // Teach by demonstration: fill the box and search it.
+      input.value = it.pick.q;
+      items = computeItems(it.pick.q);
+      cursor = items.length && !fallback ? 0 : -1;
+      render();
+      input.focus();
+      return;
+    }
     items = [];
     cursor = -1;
     render();
@@ -147,9 +180,16 @@ export function initSearch(opts: {
   }
 
   input.addEventListener("input", () => {
-    items = find(input.value);
-    cursor = items.length ? 0 : -1;
+    items = computeItems(input.value);
+    cursor = items.length && !fallback && input.value.trim() ? 0 : -1;
     render();
+  });
+  input.addEventListener("focus", () => {
+    if (!input.value.trim()) {
+      items = computeItems("");
+      cursor = -1;
+      render();
+    }
   });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
