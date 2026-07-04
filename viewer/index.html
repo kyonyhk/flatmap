@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Singapore HDB resale prices</title>
+  <meta name="description" content="Every HDB resale transaction since 1990 — nearly a million sales — on a 3D map of Singapore. Scrub through 36 years and watch estates rise." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <!-- og:image and og:url must be absolute: set the domain after deploy -->
+  <meta property="og:title" content="Singapore HDB resale prices, 1990 – today" />
+  <meta property="og:description" content="Every HDB resale transaction since 1990 on a 3D map. Scrub through 36 years and watch estates rise." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://SET-DOMAIN-AFTER-DEPLOY/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <style>
+    :root {
+      --surface: rgba(26, 26, 25, 0.62);
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-muted: #898781;
+      --hairline: rgba(255, 255, 255, 0.10);
+    }
+    * { margin: 0; box-sizing: border-box; }
+    html, body, #map { height: 100%; width: 100%; overflow: hidden; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #0d0d0d;
+      color: var(--ink);
+    }
+    .chip {
+      position: absolute;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: 999px;
+      backdrop-filter: blur(8px) saturate(1.15);
+      -webkit-backdrop-filter: blur(8px) saturate(1.15);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 18px;
+      z-index: 10;
+    }
+    #title {
+      top: 16px;
+      left: 16px;
+      font-size: 13px;
+      color: var(--ink-2);
+    }
+    #title strong { color: var(--ink); font-weight: 600; }
+    #search {
+      top: 16px;
+      right: 16px;
+      padding: 10px 16px;
+      width: min(280px, calc(100vw - 32px));
+    }
+    #search-input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--ink);
+      font-size: 13px;
+      font-family: inherit;
+    }
+    #search-input::placeholder { color: var(--ink-muted); }
+    #search-results {
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: 16px;
+      backdrop-filter: blur(8px) saturate(1.15);
+      -webkit-backdrop-filter: blur(8px) saturate(1.15);
+      overflow: hidden;
+      padding: 6px;
+    }
+    #search-results.open { display: block; }
+    #search-results .hit {
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    #search-results .hit-main {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+    }
+    #search-results .hit-main span {
+      font-size: 10px;
+      color: var(--ink-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .hit-badge {
+      flex: none;
+      font-size: 9px;
+      color: var(--ink-muted);
+      border: 1px solid var(--hairline);
+      border-radius: 999px;
+      padding: 1px 7px;
+    }
+    #search-results .hit.cur, #search-results .hit:hover { background: rgba(255, 255, 255, 0.10); }
+    #hints {
+      position: absolute;
+      top: 64px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+      z-index: 9;
+    }
+    #hints.gone { display: none; }
+    #hints button {
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: 999px;
+      backdrop-filter: blur(8px) saturate(1.15);
+      -webkit-backdrop-filter: blur(8px) saturate(1.15);
+      color: var(--ink-2);
+      font-size: 11px;
+      font-family: inherit;
+      padding: 7px 14px;
+      cursor: pointer;
+    }
+    #hints button:hover { color: var(--ink); background: rgba(50, 50, 48, 0.75); }
+    #compass {
+      position: absolute;
+      bottom: 56px;
+      right: 16px;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      backdrop-filter: blur(8px) saturate(1.15);
+      -webkit-backdrop-filter: blur(8px) saturate(1.15);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      z-index: 10;
+    }
+    #compass svg { transition: transform 0.15s; }
+    #compass:hover { background: rgba(50, 50, 48, 0.8); }
+    #panel {
+      position: absolute;
+      top: 64px;
+      right: 16px;
+      width: min(300px, calc(100vw - 32px));
+      max-height: calc(100% - 180px);
+      overflow-y: auto;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: 18px;
+      backdrop-filter: blur(8px) saturate(1.15);
+      -webkit-backdrop-filter: blur(8px) saturate(1.15);
+      padding: 16px;
+      z-index: 11;
+      font-size: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+    }
+    #panel.hidden { display: none; }
+    #panel .muted { color: var(--ink-muted); }
+    #panel .ink { color: var(--ink); }
+    #panel-close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid var(--hairline);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--ink-2);
+      font-size: 14px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .panel-head { font-size: 14px; padding-right: 28px; }
+    .panel-head strong { font-weight: 650; }
+    .panel-sub { font-size: 11px; margin: 4px 0 12px; line-height: 1.5; }
+    .spark { display: block; width: 100%; margin-top: 2px; }
+    .spark-empty { font-size: 11px; margin: 12px 0; }
+    .spark-ends {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--ink-muted);
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px;
+    }
+    .spark-mult { font-size: 11px; color: var(--ink-2); margin: 4px 0 12px; }
+    .panel-txhead { font-size: 10px; margin-bottom: 6px; text-transform: lowercase; }
+    .floor-row {
+      display: grid;
+      grid-template-columns: 36px 1fr 74px 20px;
+      gap: 6px;
+      align-items: center;
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+      padding: 2px 0;
+    }
+    .floor-bar { height: 7px; border-radius: 4px; background: rgba(255, 255, 255, 0.05); overflow: hidden; }
+    .floor-bar i { display: block; height: 100%; border-radius: 4px; }
+    .floor-val { text-align: right; color: var(--ink-2); }
+    .floor-n { text-align: right; }
+    .txlist {
+      max-height: 288px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      margin-right: -8px;
+      padding-right: 8px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+    }
+    .txlist::-webkit-scrollbar, #panel::-webkit-scrollbar { width: 5px; }
+    .txlist::-webkit-scrollbar-thumb, #panel::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.22);
+      border-radius: 3px;
+    }
+    .txlist::-webkit-scrollbar-track, #panel::-webkit-scrollbar-track { background: transparent; }
+    .tx {
+      display: grid;
+      grid-template-columns: 52px 32px 40px 36px 1fr;
+      gap: 3px;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      padding: 3px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      white-space: nowrap;
+    }
+    .tx span:nth-child(2), .tx span:nth-child(3), .tx strong { text-align: right; }
+    #panel-share {
+      margin-top: 12px;
+      width: 100%;
+      padding: 8px 0;
+      border-radius: 999px;
+      border: 1px solid var(--hairline);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--ink-2);
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    #panel-share:hover { background: rgba(255, 255, 255, 0.12); color: var(--ink); }
+    #filter-chip {
+      bottom: 130px;
+      left: 16px;
+      font-size: 11px;
+      color: var(--ink);
+      padding: 8px 8px 8px 14px;
+      gap: 8px;
+    }
+    #filter-chip.hidden { display: none; }
+    #filter-chip span { font-variant-numeric: tabular-nums; }
+    #filter-clear {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid var(--hairline);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--ink-2);
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    #filter-clear:hover { background: rgba(255, 255, 255, 0.14); color: var(--ink); }
+    #toast {
+      position: absolute;
+      bottom: 176px;
+      left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: 999px;
+      backdrop-filter: blur(8px) saturate(1.15);
+      -webkit-backdrop-filter: blur(8px) saturate(1.15);
+      padding: 9px 18px;
+      font-size: 12px;
+      color: var(--ink);
+      opacity: 0;
+      transition: opacity 0.25s, transform 0.25s;
+      pointer-events: none;
+      z-index: 30;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #legend {
+      bottom: 24px;
+      left: 16px;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+      border-radius: 16px;
+      padding: 10px 14px;
+    }
+    #legend .caption { font-size: 11px; color: var(--ink-2); }
+    #legend .caption-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .seg {
+      display: flex;
+      gap: 2px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 999px;
+      padding: 2px;
+    }
+    .seg button {
+      border: none;
+      background: transparent;
+      color: var(--ink-muted);
+      font-size: 10px;
+      padding: 2px 9px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .seg button.on { background: rgba(255, 255, 255, 0.14); color: var(--ink); }
+    #legend .bar {
+      height: 8px;
+      width: 170px;
+      border-radius: 4px;
+    }
+    #legend .ends {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--ink-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    #scrubber {
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 18px 8px 8px;
+      width: min(520px, calc(100vw - 32px));
+    }
+    #play {
+      width: 36px; height: 36px;
+      flex: none;
+      border-radius: 50%;
+      border: 1px solid var(--hairline);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--ink);
+      font-size: 13px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background 0.15s;
+    }
+    #play:hover { background: rgba(255, 255, 255, 0.14); }
+    #ticker {
+      bottom: 88px;
+      left: 50%;
+      transform: translateX(-50%);
+      flex-direction: column;
+      gap: 3px;
+      border-radius: 18px;
+      padding: 10px 20px;
+      text-align: center;
+      max-width: min(560px, calc(100vw - 32px));
+      transition: opacity 0.3s;
+    }
+    #event { display: none; flex-direction: column; gap: 1px; }
+    #event.on { display: flex; cursor: pointer; }
+    #event.on:hover strong { text-decoration: underline; text-underline-offset: 3px; }
+    #event strong { font-size: 14px; font-weight: 650; }
+    #event span { font-size: 12px; color: var(--ink-2); }
+    #stats {
+      font-size: 11px;
+      color: var(--ink-muted);
+      font-variant-numeric: tabular-nums;
+      display: flex;
+      gap: 7px;
+      justify-content: center;
+      white-space: nowrap;
+    }
+    #stats .sep { opacity: 0.5; }
+    .slider-wrap {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    #era-dots {
+      position: absolute;
+      inset: 0 8px;
+      pointer-events: none;
+    }
+    #era-dots i {
+      position: absolute;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      margin: -7px 0 0 -7px;
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    #era-dots i::after {
+      content: "";
+      position: absolute;
+      inset: 5px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.45);
+      transition: background 0.15s, inset 0.15s;
+    }
+    #era-dots i:hover::after { inset: 3.5px; background: #cde2fb; }
+    #month {
+      width: 100%;
+      appearance: none;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.15);
+      outline: none;
+      cursor: pointer;
+    }
+    #month::-webkit-slider-thumb {
+      appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--ink);
+      border: none;
+      cursor: grab;
+    }
+    #month::-moz-range-thumb {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--ink);
+      border: none;
+      cursor: grab;
+    }
+    #date {
+      font-size: 13px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      min-width: 72px;
+      text-align: right;
+      color: var(--ink);
+    }
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: #0d0d0d;
+      z-index: 20;
+      color: var(--ink-2);
+      font-size: 13px;
+      transition: opacity 0.4s;
+    }
+    #loading.done { opacity: 0; pointer-events: none; }
+    .deck-tooltip {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif !important;
+      background: var(--surface) !important;
+      border: 1px solid var(--hairline);
+      border-radius: 12px !important;
+      padding: 10px 12px !important;
+      font-size: 12px !important;
+      line-height: 1.45 !important;
+      color: var(--ink) !important;
+      backdrop-filter: blur(8px) saturate(1.15);
+      -webkit-backdrop-filter: blur(8px) saturate(1.15);
+    }
+    .deck-tooltip .sub { color: var(--ink-2); }
+    .deck-tooltip .muted { color: var(--ink-muted); }
+    .deck-tooltip .val { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="title" class="chip"><strong>Singapore HDB resale prices</strong><span>1990 – today</span></div>
+  <div id="search" class="chip">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#898781" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/></svg>
+    <input id="search-input" type="text" placeholder="Search, or ask about prices" autocomplete="off" spellcheck="false" />
+    <div id="search-results"></div>
+  </div>
+  <div id="hints">
+    <button data-act="find">find your block</button>
+    <button data-act="play">watch 36 years</button>
+    <button data-act="afc">what happened in 1997?</button>
+  </div>
+  <button id="compass" aria-label="Reset north" title="Rotate: right-drag or Ctrl+drag (two fingers on touch). Click to face north.">
+    <svg viewBox="0 0 24 24" width="20" height="20">
+      <path d="M12 3 L15.4 13 H8.6 Z" fill="#e66767"/>
+      <path d="M8.6 13 H15.4 L12 21 Z" fill="#c3c2b7"/>
+    </svg>
+  </button>
+  <aside id="panel" class="hidden"></aside>
+  <div id="legend" class="chip">
+    <div class="caption-row">
+      <span class="caption" id="legend-caption">S$ / m² · trailing 12 mo</span>
+      <div class="seg">
+        <button id="seg-now" class="on">today</button>
+        <button id="seg-all">all time</button>
+      </div>
+    </div>
+    <div class="bar" id="legend-bar"></div>
+    <div class="ends"><span id="legend-min"></span><span id="legend-max"></span></div>
+    <div class="caption-row" style="margin-top:4px">
+      <span class="caption">basemap</span>
+      <div class="seg">
+        <button id="base-dark" class="on">dark</button>
+        <button id="base-sat">satellite</button>
+      </div>
+    </div>
+  </div>
+  <div id="ticker" class="chip">
+    <div id="event">
+      <strong id="event-title"></strong>
+      <span id="event-sub"></span>
+    </div>
+    <div id="stats">
+      <span id="stat-median"></span><span class="sep">·</span><span id="stat-sales"></span><span class="sep">·</span><span id="stat-blocks"></span>
+    </div>
+  </div>
+  <div id="scrubber" class="chip">
+    <button id="play" aria-label="Play">&#9654;</button>
+    <div class="slider-wrap">
+      <input id="month" type="range" min="0" max="438" value="438" step="1" />
+      <div id="era-dots"></div>
+    </div>
+    <div id="date"></div>
+  </div>
+  <div id="filter-chip" class="chip hidden">
+    <span id="filter-label"></span>
+    <button id="filter-clear" aria-label="Clear filter">×</button>
+  </div>
+  <div id="toast"></div>
+  <div id="loading">loading 968,161 transactions…</div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

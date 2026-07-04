@@ -1,0 +1,126 @@
+{
+ "count": 968161,
+ "monthZero": "1990-01",
+ "minMonth": 0,
+ "maxMonth": 438,
+ "layout": [
+  {
+   "name": "price",
+   "type": "Uint32Array",
+   "offset": 0,
+   "length": 968161
+  },
+  {
+   "name": "building",
+   "type": "Uint16Array",
+   "offset": 3872644,
+   "length": 968161
+  },
+  {
+   "name": "month",
+   "type": "Uint16Array",
+   "offset": 5808966,
+   "length": 968161
+  },
+  {
+   "name": "sqmX10",
+   "type": "Uint16Array",
+   "offset": 7745288,
+   "length": 968161
+  },
+  {
+   "name": "leaseStart",
+   "type": "Uint16Array",
+   "offset": 9681610,
+   "length": 968161
+  },
+  {
+   "name": "flatType",
+   "type": "Uint8Array",
+   "offset": 11617932,
+   "length": 968161
+  },
+  {
+   "name": "flatModel",
+   "type": "Uint8Array",
+   "offset": 12586093,
+   "length": 968161
+  },
+  {
+   "name": "storey",
+   "type": "Uint8Array",
+   "offset": 13554254,
+   "length": 968161
+  }
+ ],
+ "enums": {
+  "flatTypes": [
+   "1 ROOM",
+   "2 ROOM",
+   "3 ROOM",
+   "4 ROOM",
+   "5 ROOM",
+   "EXECUTIVE",
+   "MULTI-GENERATION"
+  ],
+  "flatModels": [
+   "IMPROVED",
+   "NEW GENERATION",
+   "MODEL A",
+   "STANDARD",
+   "SIMPLIFIED",
+   "MODEL A-MAISONETTE",
+   "APARTMENT",
+   "MAISONETTE",
+   "TERRACE",
+   "2-ROOM",
+   "IMPROVED-MAISONETTE",
+   "MULTI GENERATION",
+   "PREMIUM APARTMENT",
+   "ADJOINED FLAT",
+   "PREMIUM MAISONETTE",
+   "MODEL A2",
+   "DBSS",
+   "TYPE S1",
+   "TYPE S2",
+   "PREMIUM APARTMENT LOFT",
+   "3GEN"
+  ],
+  "towns": [
+   "ANG MO KIO",
+   "BEDOK",
+   "BISHAN",
+   "BUKIT BATOK",
+   "BUKIT MERAH",
+   "BUKIT TIMAH",
+   "CENTRAL AREA",
+   "CHOA CHU KANG",
+   "CLEMENTI",
+   "GEYLANG",
+   "HOUGANG",
+   "JURONG EAST",
+   "JURONG WEST",
+   "KALLANG/WHAMPOA",
+   "MARINE PARADE",
+   "QUEENSTOWN",
+   "SENGKANG",
+   "SERANGOON",
+   "TAMPINES",
+   "TOA PAYOH",
+   "WOODLANDS",
+   "YISHUN",
+   "LIM CHU KANG",
+   "SEMBAWANG",
+   "BUKIT PANJANG",
+   "PASIR RIS",
+   "PUNGGOL"
+  ]
+ },
+ "stats": {
+  "totalRows": 980875,
+  "droppedNoGeocode": 12714,
+  "buildings": 9831,
+  "buildingsWithoutHeight": 42,
+  "addressesUnresolved": 150
+ }
+}

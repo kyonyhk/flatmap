@@ -1,0 +1,12 @@
+# dependencies / build
+node_modules/
+dist/
+
+# pipeline inputs and intermediates (regenerable via scripts/01..03)
+data/raw/
+data/interim/
+
+# keep data/out/ tracked: the viewer deploys from it, and it spares
+# cloners the 1-hour geocode run
+
+.DS_Store
