@@ -65,6 +65,76 @@ function sparkline(idx: number): string {
     <div class="spark-mult">×${mult >= 10 ? mult.toFixed(0) : mult.toFixed(1)} since ${first.y}</div>`;
 }
 
+// Fair range: for each flat type this block contains, the 25th-75th
+// percentile of the past year's estate sales of that type (S$/m²),
+// adjusted by the block's own all-time premium vs its town (clamped, and
+// only applied when both sides have enough data), sized by the block's
+// typical unit. Receipts stated inline; explicitly an estimate.
+function fairSection(idx: number): string {
+  const { col, buildings, maxMonth, enums } = ctx;
+  const b = buildings[idx];
+  const N = col.price.length;
+  const T = FLAT_SHORT.length;
+  const { txOffsets, txIndex } = ctx;
+  if (txOffsets[idx] === txOffsets[idx + 1]) return "";
+  const blkLease = col.leaseStart[txIndex[txOffsets[idx]]];
+  const est12: number[][] = Array.from({ length: T }, () => []); // similar lease vintage
+  const est12All: number[][] = Array.from({ length: T }, () => []); // any vintage (fallback)
+  const townAll = Array.from({ length: T }, () => ({ s: 0, c: 0 }));
+  const blkAll = Array.from({ length: T }, () => ({ s: 0, c: 0 }));
+  const blkSizes: number[][] = Array.from({ length: T }, () => []);
+  const from = maxMonth - 11;
+  for (let i = 0; i < N; i++) {
+    const t = col.flatType[i];
+    const psm = col.price[i] / (col.sqmX10[i] / 10);
+    if (buildings[col.building[i]].town === b.town) {
+      townAll[t].s += psm;
+      townAll[t].c++;
+      if (col.month[i] >= from) {
+        est12All[t].push(psm);
+        // Comps should be blocks of a similar age: a 1978 flat's fair range
+        // shouldn't be stretched by 2015-lease premium blocks across town.
+        if (Math.abs(col.leaseStart[i] - blkLease) <= 12) est12[t].push(psm);
+      }
+    }
+    if (col.building[i] === idx) {
+      blkAll[t].s += psm;
+      blkAll[t].c++;
+      blkSizes[t].push(col.sqmX10[i] / 10);
+    }
+  }
+  const rows: string[] = [];
+  for (let t = 0; t < T; t++) {
+    const similar = est12[t].length >= 15;
+    const pool = similar ? est12[t] : est12All[t];
+    if (blkAll[t].c < 3 || pool.length < 15) continue;
+    const arr = pool.sort((a, z) => a - z);
+    const q = (p: number) => arr[Math.floor(p * (arr.length - 1))];
+    let factor = 1;
+    if (blkAll[t].c >= 5 && townAll[t].c >= 50) {
+      factor = blkAll[t].s / blkAll[t].c / (townAll[t].s / townAll[t].c);
+      factor = Math.max(0.8, Math.min(1.2, factor));
+    }
+    const sizes = blkSizes[t].sort((a, z) => a - z);
+    const sqm = sizes[sizes.length >> 1];
+    const lo = q(0.25) * factor * sqm;
+    const hi = q(0.75) * factor * sqm;
+    const fp = Math.round((factor - 1) * 100);
+    rows.push(`
+      <div class="fair-row">
+        <strong>${FLAT_SHORT[t]}</strong>
+        <span class="fair-range">${sgd(lo)} – ${sgd(hi)}</span>
+        <span class="muted">~${Math.round(sqm)} m²</span>
+      </div>
+      <div class="fair-note muted">${arr.length} ${similar ? "similar-age " : ""}${title(enums.towns[b.town])} ${FLAT_SHORT[t]} sales, past 12 mo${fp ? ` · this block ${fp > 0 ? "+" : ""}${fp}% historically` : ""}</div>`);
+  }
+  if (!rows.length) return "";
+  return `
+    <div class="panel-txhead muted">fair range today</div>
+    ${rows.join("")}
+    <div class="fair-disc muted">an estimate from registered sales, not a valuation</div>`;
+}
+
 // Per-storey-band S$/m² bars — mirrors the 3D floor plates so the floor
 // story is readable without hunting for them on the map.
 function floorSection(idx: number): string {
@@ -124,6 +194,7 @@ export function showPanel(idx: number) {
       ${title(enums.towns[b.town])} · ${b.floors || "?"} floors · ${b.units || "?"} flats
       ${leaseLeft !== null ? `<br>99-yr lease from ${leaseStart} · <strong class="ink">${leaseLeft} yrs left</strong>` : ""}
     </div>
+    ${fairSection(idx)}
     ${sparkline(idx)}
     ${floorSection(idx)}
     <div class="panel-txhead muted" style="margin-top:10px">${txs.length.toLocaleString()} resales since 1990</div>
