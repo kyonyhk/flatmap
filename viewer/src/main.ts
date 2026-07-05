@@ -466,6 +466,7 @@ function makeMrtLinkLayers() {
       getPixelOffset: [0, -10],
       fontFamily: "'Helvetica Neue', Arial, sans-serif",
       fontSettings: { sdf: true },
+      characterSet: "auto",
       outlineWidth: 3,
       outlineColor: [13, 13, 13, 220],
       parameters: { depthCompare: "always", depthWriteEnabled: false },
