@@ -45,6 +45,7 @@ type Station = {
   codes: string[];
   colors: string[];
   grnd: string | null;
+  opened: number; // month index since Jan 1990 (0 = already open)
   ring: [number, number][] | null;
 };
 
@@ -387,7 +388,8 @@ function makeLayer(month: number) {
 // plus station structure footprints — modest volumes for aboveground
 // stations, ground plates for underground ones. All gated past
 // neighborhood zoom so the island view stays clean.
-const STATION_ZOOM = 12.5;
+const STATION_ZOOM = 13.2;
+let stationsOn = localStorage.getItem("flatmap-stations") !== "off";
 const stationMarkers: maplibregl.Marker[] = [];
 for (const s of stations) {
   const el = document.createElement("div");
@@ -401,15 +403,21 @@ for (const s of stations) {
       .addTo(map),
   );
 }
+// Visibility = toggle on, zoomed past the gate, and — because the network
+// grew with the housing — the station has opened by the scrubbed month.
 function syncStationMarkers() {
-  const show = map.getZoom() >= STATION_ZOOM;
-  for (const m of stationMarkers) m.getElement().style.display = show ? "" : "none";
+  const zoomed = stationsOn && map.getZoom() >= STATION_ZOOM;
+  for (let i = 0; i < stationMarkers.length; i++) {
+    const el = stationMarkers[i].getElement();
+    const show = zoomed && stations[i].opened <= curMonth;
+    el.style.visibility = show ? "visible" : "hidden";
+    el.style.opacity = show ? "1" : "0";
+  }
 }
-syncStationMarkers();
 
 function makeStationStructures() {
-  if (map.getZoom() < STATION_ZOOM) return null;
-  const withRing = stations.filter((s) => s.ring);
+  if (!stationsOn || map.getZoom() < STATION_ZOOM) return null;
+  const withRing = stations.filter((s) => s.ring && s.opened <= curMonth);
   return new SolidPolygonLayer<Station>({
     id: "station-structures",
     data: withRing,
@@ -649,6 +657,7 @@ function updateTicker(month: number) {
 }
 
 function update() {
+  syncStationMarkers();
   computeWindow(curMonth);
   if (activeFilter) {
     const n = computeFilterMatch(activeFilter, curMonth, filterMatch);
@@ -994,6 +1003,22 @@ function setBasemap(sat: boolean) {
 }
 baseDark.addEventListener("click", () => setBasemap(false));
 baseSat.addEventListener("click", () => setBasemap(true));
+
+const stOn = document.getElementById("st-on")!;
+const stOff = document.getElementById("st-off")!;
+function setStations(on: boolean) {
+  stationsOn = on;
+  localStorage.setItem("flatmap-stations", on ? "on" : "off");
+  stOn.classList.toggle("on", on);
+  stOff.classList.toggle("on", !on);
+  update();
+}
+stOn.addEventListener("click", () => setStations(true));
+stOff.addEventListener("click", () => setStations(false));
+if (!stationsOn) {
+  stOn.classList.remove("on");
+  stOff.classList.add("on");
+}
 
 slider.addEventListener("input", () => {
   curMonth = Number(slider.value);

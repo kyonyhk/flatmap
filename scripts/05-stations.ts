@@ -41,7 +41,10 @@ const byCode = new Map<string, Codes>();
 {
   const g = await Bun.file(`${RAW}/sgrail-stations.geojson`).json();
   for (const f of g.features) {
-    if (f.geometry.type !== "Point" || !f.properties.station_codes || !f.properties.name) continue;
+    // Points include station exits (named "A"/"B"/...) that carry the parent
+    // station's codes — only true stations may feed the lookup tables.
+    if (f.geometry.type !== "Point" || f.properties.stop_type !== "station") continue;
+    if (!f.properties.station_codes || !f.properties.name) continue;
     const codes = String(f.properties.station_codes).split("-");
     const colors = String(f.properties.station_colors ?? "")
       .split("-")
@@ -71,16 +74,65 @@ const ringsByName = new Map<string, { grnd: string; ring: [number, number][] }>(
   }
 }
 
+// Opening dates (Wikidata P1619), keyed by normalized station name, as
+// month indices since Jan 1990 (pre-1990 clamps to 0). Stations without a
+// Wikidata date fall back to their line's opening month.
+const openedByName = new Map<string, number>();
+{
+  const d = await Bun.file(`${RAW}/wikidata-stations.json`).json();
+  for (const r of d.results.bindings) {
+    if (!r.opened?.value || !r.sLabel?.value) continue;
+    const label = r.sLabel.value.replace(/\s+(MRT|LRT)\s+station$/i, "");
+    const y = +r.opened.value.slice(0, 4);
+    const m = +r.opened.value.slice(5, 7);
+    const idx = Math.max(0, (y - 1990) * 12 + (m - 1));
+    const k = norm(label);
+    if (!openedByName.has(k) || openedByName.get(k)! > idx) openedByName.set(k, idx);
+  }
+}
+const monthIdx = (y: number, m: number) => (y - 1990) * 12 + (m - 1);
+const LINE_OPENED: Record<string, number> = {
+  NS: 0, // 1987
+  EW: 0, // 1987
+  CG: monthIdx(2002, 2),
+  NE: monthIdx(2003, 6),
+  CC: monthIdx(2009, 5),
+  CE: monthIdx(2012, 1),
+  DT: monthIdx(2013, 12),
+  TE: monthIdx(2020, 1),
+  BP: monthIdx(1999, 11),
+  SK: monthIdx(2003, 1),
+  STC: monthIdx(2003, 1),
+  SE: monthIdx(2003, 1),
+  SW: monthIdx(2005, 1),
+  PG: monthIdx(2005, 1),
+  PTC: monthIdx(2005, 1),
+  PE: monthIdx(2005, 1),
+  PW: monthIdx(2005, 1),
+};
+
 const title = (s: string) =>
   s.toLowerCase().replace(/(^|\s|-)\S/g, (c) => c.toUpperCase());
 
 let noCodes = 0;
 let noRing = 0;
+let datedByWikidata = 0;
+let datedByLine = 0;
 const stations = [...byStation.entries()].map(([key, s]) => {
   const cc = codesByName.get(key) ?? byCode.get(key);
   const rr = ringsByName.get(cc ? norm(cc.name) : key) ?? ringsByName.get(key);
   if (!cc) noCodes++;
   if (!rr) noRing++;
+  const nameKey = cc ? norm(cc.name) : key;
+  const prefix = cc?.codes[0]?.match(/^[A-Z]+/)?.[0] ?? "";
+  let opened = openedByName.get(nameKey);
+  if (opened !== undefined) datedByWikidata++;
+  else if (LINE_OPENED[prefix] !== undefined) {
+    opened = LINE_OPENED[prefix];
+    datedByLine++;
+  } else {
+    opened = 0;
+  }
   return {
     name: title(cc?.name ?? s.name),
     lat: +(s.lat / s.n).toFixed(6),
@@ -88,13 +140,14 @@ const stations = [...byStation.entries()].map(([key, s]) => {
     codes: cc?.codes ?? [],
     colors: cc?.colors ?? [],
     grnd: rr?.grnd ?? null,
+    opened,
     ring: rr?.ring ?? null,
   };
 });
 
 await Bun.write(`${OUT}/stations.json`, JSON.stringify(stations));
 console.log(
-  `stations: ${stations.length} · without codes: ${noCodes} · without footprint: ${noRing}`,
+  `stations: ${stations.length} · without codes: ${noCodes} · without footprint: ${noRing} · dated: ${datedByWikidata} wikidata + ${datedByLine} line-fallback`,
 );
 if (noCodes) {
   for (const [key, s] of byStation) if (!codesByName.get(key)) console.log("  no codes:", s.name);
