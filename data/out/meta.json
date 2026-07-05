@@ -113,13 +113,14 @@
    "SEMBAWANG",
    "BUKIT PANJANG",
    "PASIR RIS",
-   "PUNGGOL"
+   "PUNGGOL",
+   "TENGAH"
   ]
  },
  "stats": {
   "totalRows": 980875,
   "droppedNoGeocode": 12714,
-  "buildings": 9831,
+  "buildings": 10807,
   "buildingsWithoutHeight": 42,
   "addressesUnresolved": 150
  }

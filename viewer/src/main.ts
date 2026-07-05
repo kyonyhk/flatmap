@@ -83,7 +83,7 @@ const mapLoaded = new Promise<void>((res) => map.on("load", () => res()));
 // The two big files stream with byte progress, driving the loader's live
 // sales counter (decoded bytes vs the known decoded total).
 
-const EXPECTED_BYTES = 33_077_153; // decoded bytes of buildings.json + transactions.bin
+const EXPECTED_BYTES = 35_494_975; // decoded bytes of buildings.json + transactions.bin
 let loadedBytes = 0;
 let counterRaf = 0;
 const loadFill = document.getElementById("load-fill")!;

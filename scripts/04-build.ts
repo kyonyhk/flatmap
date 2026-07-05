@@ -76,7 +76,12 @@ for (const r of csvToObjects(await Bun.file(`${RAW}/hdb-property-info.csv`).text
   });
 }
 
-// Buildings: every address that geocoded successfully.
+// Buildings: every geocoded address in the universe — traded or not.
+// Never-resold blocks (young BTOs, all of Tengah) exist on the map as
+// "not yet traded" rather than being invisible.
+const addrList: { block: string; street: string; town: string }[] =
+  await Bun.file(`${INTERIM}/addresses.json`).json();
+const townIdx = new Map<string, number>(enums.towns.map((t: string, i: number) => [t, i]));
 const buildingIdx = new Map<string, number>();
 const buildings: any[] = [];
 const lines = (await Bun.file(`${INTERIM}/transactions.ndjson`).text()).split("\n").filter(Boolean);
@@ -84,23 +89,22 @@ const rows = lines.map((l) => JSON.parse(l));
 
 let noGeo = 0;
 let noHeight = 0;
-for (const r of rows) {
-  if (buildingIdx.has(r.addr)) continue;
-  const hit = cache[r.addr];
+for (const a of addrList) {
+  const key = `${a.block}|${a.street}`;
+  if (buildingIdx.has(key)) continue;
+  const hit = cache[key];
   if (!hit) {
     noGeo++;
-    buildingIdx.set(r.addr, -1);
     continue;
   }
-  const info = propInfo.get(r.addr);
+  const info = propInfo.get(key);
   if (!info) noHeight++;
-  const [block, street] = r.addr.split("|");
-  buildingIdx.set(r.addr, buildings.length);
   const mrt = nearestExit(hit.lat, hit.lon);
+  buildingIdx.set(key, buildings.length);
   buildings.push({
-    block,
-    street,
-    town: r.town,
+    block: a.block,
+    street: a.street,
+    town: townIdx.get(a.town) ?? 0,
     lat: hit.lat,
     lon: hit.lon,
     postal: hit.postal,
@@ -116,7 +120,7 @@ for (const r of rows) {
 }
 // stations.json is emitted by 05-stations.ts (codes, colors, footprints).
 
-const kept = rows.filter((r) => buildingIdx.get(r.addr)! >= 0);
+const kept = rows.filter((r) => buildingIdx.has(r.addr));
 const n = kept.length;
 
 // Columnar binary, columns ordered by descending element size so every
