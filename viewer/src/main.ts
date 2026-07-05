@@ -8,13 +8,13 @@
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MapboxOverlay } from "@deck.gl/mapbox";
-import { SolidPolygonLayer, PathLayer, TextLayer, ScatterplotLayer } from "@deck.gl/layers";
+import { SolidPolygonLayer, PathLayer, TextLayer } from "@deck.gl/layers";
 import { EVENTS, type Era } from "./events";
 import { initPanel, showPanel, hidePanel } from "./panel";
 import { initSearch, type SearchPick, type AnswerItem, type Suggestion } from "./search";
 import { parseQuery, hasConstraints, type Parsed } from "./query";
 import { RAMP, LUT } from "./ramp";
-import { DataFilterExtension } from "@deck.gl/extensions";
+import { DataFilterExtension, PathStyleExtension } from "@deck.gl/extensions";
 import { startLoader } from "./loader";
 
 // The street fly-through starts before anything else so it plays for the
@@ -33,10 +33,20 @@ type Building = {
   units: number;
   mrt: string;
   mrtM: number;
+  mrtLat: number;
+  mrtLon: number;
   footprint: [number, number][] | null;
 };
 
-type Station = { name: string; lat: number; lon: number };
+type Station = {
+  name: string;
+  lat: number;
+  lon: number;
+  codes: string[];
+  colors: string[];
+  grnd: string | null;
+  ring: [number, number][] | null;
+};
 
 // ------------------------------------------------------------ url state ----
 // Shareable moments: #m=<monthIdx>&c=<now|all>&cam=<lon,lat,zoom,pitch,bearing>
@@ -72,7 +82,7 @@ const mapLoaded = new Promise<void>((res) => map.on("load", () => res()));
 // The two big files stream with byte progress, driving the loader's live
 // sales counter (decoded bytes vs the known decoded total).
 
-const EXPECTED_BYTES = 32_705_445; // decoded bytes of buildings.json + transactions.bin
+const EXPECTED_BYTES = 33_077_153; // decoded bytes of buildings.json + transactions.bin
 let loadedBytes = 0;
 let counterRaf = 0;
 const loadFill = document.getElementById("load-fill")!;
@@ -372,47 +382,93 @@ function makeLayer(month: number) {
   });
 }
 
-// MRT/LRT stations: quiet white dots + names, only past neighborhood zoom
-// where they aid orientation without cluttering the island view.
+// MRT/LRT stations, Google-Maps-style: DOM markers (white roundel, station
+// name, colored line-code chips) that never hide behind extruded towers,
+// plus station structure footprints — modest volumes for aboveground
+// stations, ground plates for underground ones. All gated past
+// neighborhood zoom so the island view stays clean.
 const STATION_ZOOM = 12.5;
-function makeStationLayers() {
-  if (map.getZoom() < STATION_ZOOM) return [];
-  return [
-    new ScatterplotLayer<Station>({
-      id: "stations",
-      data: stations,
-      getPosition: (s) => [s.lon, s.lat],
-      radiusUnits: "pixels",
-      getRadius: 3.5,
-      getFillColor: [255, 255, 255, 200],
-      stroked: true,
-      getLineColor: [13, 13, 13, 220],
-      getLineWidth: 1.5,
-      lineWidthUnits: "pixels",
-    }),
-    new TextLayer<Station>({
-      id: "station-labels",
-      data: stations,
-      getPosition: (s) => [s.lon, s.lat],
-      getText: (s) => s.name,
-      getSize: 10.5,
-      getColor: [195, 194, 183, 235],
-      getPixelOffset: [0, -13],
-      fontFamily: "'Helvetica Neue', Arial, sans-serif",
-      fontSettings: { sdf: true },
-      outlineWidth: 3,
-      outlineColor: [13, 13, 13, 210],
-    }),
-  ];
+const stationMarkers: maplibregl.Marker[] = [];
+for (const s of stations) {
+  const el = document.createElement("div");
+  el.className = "mrt-marker";
+  el.innerHTML =
+    `<i></i><span>${s.name}</span>` +
+    s.codes.map((c, i) => `<b style="background:${s.colors[i] ?? "#52514e"}">${c}</b>`).join("");
+  stationMarkers.push(
+    new maplibregl.Marker({ element: el, anchor: "left", offset: [-7, 0] })
+      .setLngLat([s.lon, s.lat])
+      .addTo(map),
+  );
 }
+function syncStationMarkers() {
+  const show = map.getZoom() >= STATION_ZOOM;
+  for (const m of stationMarkers) m.getElement().style.display = show ? "" : "none";
+}
+syncStationMarkers();
+
+function makeStationStructures() {
+  if (map.getZoom() < STATION_ZOOM) return null;
+  const withRing = stations.filter((s) => s.ring);
+  return new SolidPolygonLayer<Station>({
+    id: "station-structures",
+    data: withRing,
+    extruded: true,
+    getPolygon: (s) => s.ring as any,
+    getElevation: (s) => (s.grnd === "ABOVEGROUND" ? 9 : 0.4),
+    elevationScale: 3,
+    getFillColor: (s) => (s.grnd === "ABOVEGROUND" ? [140, 137, 129, 200] : [140, 137, 129, 60]),
+    material: { ambient: 0.55, diffuse: 0.5, shininess: 30, specularColor: [60, 60, 60] },
+  });
+}
+
 let stationsShown = false;
 map.on("zoomend", () => {
+  syncStationMarkers();
   const show = map.getZoom() >= STATION_ZOOM;
   if (show !== stationsShown) {
     stationsShown = show;
     update();
   }
 });
+
+// Selected block -> nearest MRT exit: a dashed line-of-sight trace with the
+// distance on it. (Walking routes are a planned upgrade via OneMap routing.)
+function makeMrtLinkLayers() {
+  if (selectedIdx === null) return [];
+  const b = buildings[selectedIdx];
+  if (!b.mrtLat) return [];
+  const mid: [number, number, number] = [(b.lon + b.mrtLon) / 2, (b.lat + b.mrtLat) / 2, 3];
+  return [
+    new PathLayer({
+      id: "mrt-link",
+      data: [b],
+      getPath: () => [
+        [b.lon, b.lat, 2],
+        [b.mrtLon, b.mrtLat, 2],
+      ] as any,
+      getColor: [255, 255, 255, 150],
+      getWidth: 1.6,
+      widthUnits: "pixels",
+      extensions: [new PathStyleExtension({ dash: true })],
+      getDashArray: [7, 5],
+      dashJustified: true,
+    }),
+    new TextLayer({
+      id: "mrt-link-label",
+      data: [b],
+      getPosition: () => mid as any,
+      getText: () => `${b.mrtM >= 1000 ? (b.mrtM / 1000).toFixed(1) + " km" : b.mrtM + " m"} · straight line`,
+      getSize: 10.5,
+      getColor: [232, 231, 224, 240],
+      getPixelOffset: [0, -10],
+      fontFamily: "'Helvetica Neue', Arial, sans-serif",
+      fontSettings: { sdf: true },
+      outlineWidth: 3,
+      outlineColor: [13, 13, 13, 220],
+    }),
+  ];
+}
 
 // Wireframe cage standing in for the selected building: keeps its shape
 // legible while leaving the interior floor plates fully visible.
@@ -598,7 +654,8 @@ function update() {
   overlay.setProps({
     layers: [
       makeLayer(curMonth),
-      ...makeStationLayers(),
+      makeStationStructures(),
+      ...makeMrtLinkLayers(),
       makeShellLayer(),
       ...(makeCutawayLayer() ?? []),
       makeSelectionLayer(),

@@ -193,7 +193,7 @@ export function showPanel(idx: number) {
     <div class="panel-sub muted">
       ${title(enums.towns[b.town])} · ${b.floors || "?"} floors · ${b.units || "?"} flats
       ${leaseLeft !== null ? `<br>99-yr lease from ${leaseStart} · <strong class="ink">${leaseLeft} yrs left</strong>` : ""}
-      ${b.mrt ? `<br>${b.mrtM >= 1000 ? (b.mrtM / 1000).toFixed(1) + " km" : b.mrtM + " m"} to ${b.mrt} ${b.mrtM <= 800 ? "MRT" : "MRT (nearest)"}` : ""}
+      ${b.mrt ? `<br>${b.mrtM >= 1000 ? (b.mrtM / 1000).toFixed(1) + " km" : b.mrtM + " m"} straight-line to ${b.mrt} MRT` : ""}
     </div>
     ${fairSection(idx)}
     ${sparkline(idx)}

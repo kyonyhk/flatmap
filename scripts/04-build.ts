@@ -53,17 +53,17 @@ function distM(aLat: number, aLon: number, bLat: number, bLon: number): number {
     Math.cos(aLat * RAD) * Math.cos(bLat * RAD) * Math.sin(dLon / 2) ** 2;
   return 2 * 6371000 * Math.asin(Math.sqrt(s));
 }
-function nearestExit(lat: number, lon: number): { name: string; m: number } {
+function nearestExit(lat: number, lon: number) {
   let best = Infinity;
-  let name = "";
+  let hit = exits[0];
   for (const e of exits) {
     const d = distM(lat, lon, e.lat, e.lon);
     if (d < best) {
       best = d;
-      name = e.name;
+      hit = e;
     }
   }
-  return { name, m: Math.round(best) };
+  return { name: hit.name, m: Math.round(best), lat: hit.lat, lon: hit.lon };
 }
 
 // Building heights and unit counts from HDB property information.
@@ -107,30 +107,14 @@ for (const r of rows) {
     floors: info?.floors ?? 0,
     year: info?.year ?? 0,
     units: info?.units ?? 0,
-    mrt: mrt.name,
+    mrt: mrt.name.toLowerCase().replace(/(^|\s|-)\S/g, (c) => c.toUpperCase()),
     mrtM: mrt.m,
+    mrtLat: +mrt.lat.toFixed(6),
+    mrtLon: +mrt.lon.toFixed(6),
     footprint: footprints.get(hit.postal) ?? null,
   });
 }
-
-// Station display points: one centroid per station name.
-{
-  const byName = new Map<string, { lat: number; lon: number; n: number }>();
-  for (const e of exits) {
-    let s = byName.get(e.name);
-    if (!s) byName.set(e.name, (s = { lat: 0, lon: 0, n: 0 }));
-    s.lat += e.lat;
-    s.lon += e.lon;
-    s.n++;
-  }
-  const stations = [...byName.entries()].map(([name, s]) => ({
-    name: name.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()),
-    lat: +(s.lat / s.n).toFixed(6),
-    lon: +(s.lon / s.n).toFixed(6),
-  }));
-  await Bun.write(`${OUT}/stations.json`, JSON.stringify(stations));
-  console.log(`stations: ${stations.length} (from ${exits.length} exits)`);
-}
+// stations.json is emitted by 05-stations.ts (codes, colors, footprints).
 
 const kept = rows.filter((r) => buildingIdx.get(r.addr)! >= 0);
 const n = kept.length;
