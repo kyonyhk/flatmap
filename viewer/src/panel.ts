@@ -2,6 +2,7 @@
 // lease position, floor-level breakdown, and its actual transactions.
 // Pure DOM into #panel.
 import { rampCss } from "./ramp";
+import { track } from "./analytics";
 
 type Ctx = {
   buildings: any[];
@@ -205,6 +206,7 @@ export function showPanel(idx: number) {
   el.classList.remove("hidden");
   document.getElementById("panel-close")!.addEventListener("click", ctx.onClose);
   document.getElementById("panel-share")!.addEventListener("click", async () => {
+    track("share");
     const shareTitle = `Blk ${b.block} ${title(b.street)} — every resale since 1990`;
     // Native share sheet on touch devices only; desktop Chrome/Safari also
     // expose navigator.share but their sheets are worse than copy + toast.

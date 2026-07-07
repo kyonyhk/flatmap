@@ -14,6 +14,7 @@ import { initPanel, showPanel, hidePanel } from "./panel";
 import { initSearch, type SearchPick, type AnswerItem, type Suggestion } from "./search";
 import { parseQuery, hasConstraints, type Parsed } from "./query";
 import { RAMP, LUT } from "./ramp";
+import { track } from "./analytics";
 import { DataFilterExtension, PathStyleExtension } from "@deck.gl/extensions";
 import { startLoader } from "./loader";
 
@@ -372,7 +373,10 @@ function makeLayer(month: number) {
     filterRange: [0.5, 1.5],
     elevationScale: 3,
     pickable: true,
-    onClick: ({ index }) => select(index),
+    onClick: ({ index }) => {
+      track("click-block", { town: meta.enums.towns[buildings[index].town] });
+      select(index);
+    },
     material: { ambient: 0.5, diffuse: 0.55, shininess: 40, specularColor: [60, 70, 90] },
     updateTriggers: {
       getFillColor: [month, colorMode, filterRev],
@@ -700,6 +704,7 @@ function select(idx: number | null, fly = false) {
 }
 
 function eraJump(e: Era) {
+  track("era", { title: e.title });
   stop();
   curMonth = e.at;
   const sel = e.select !== undefined ? byPostal.get(e.select) ?? null : null;
@@ -829,6 +834,7 @@ function answers(q: string): AnswerItem[] {
         sub: `${scope} · ${monthName(col.month[i])} · ${FLAT_SHORT[col.flatType[i]]} · ${Math.round(col.sqmX10[i] / 10)} m² · ~F${col.storey[i]}`,
         badge: "answer",
         run: () => {
+          track("ask-answer");
           stop();
           curMonth = col.month[i];
           select(bIdx, true);
@@ -845,6 +851,7 @@ function answers(q: string): AnswerItem[] {
       sub: `${n.toLocaleString()} blocks with a matching sale in the past year — others dim`,
       badge: "filter",
       run: () => {
+        track("ask-filter");
         activeFilter = p;
         filterChip.classList.remove("hidden");
         update();
@@ -858,14 +865,17 @@ function onSearchPick(p: SearchPick) {
   if (p.kind === "run") {
     p.run();
   } else if (p.kind === "block") {
+    track("search-block", { town: meta.enums.towns[buildings[p.idx].town] });
     select(p.idx, true);
   } else if (p.kind === "town") {
+    track("search-town", { town: meta.enums.towns[p.town] });
     const c = townCenters[p.town];
     select(null);
     map.flyTo({ center: [c.lon, c.lat], zoom: 13.4, pitch: 55, duration: 2200 });
   } else if (p.kind === "era") {
     eraJump(EVENTS[p.era]);
   } else {
+    track("search-year", { year: p.year });
     stop();
     curMonth = Math.min(meta.maxMonth, (p.year - 1990) * 12 + 6);
     update();
@@ -1036,6 +1046,7 @@ function stop() {
 }
 function play() {
   if (curMonth >= meta.maxMonth) curMonth = 0;
+  track("play");
   playing = true;
   playBtn.innerHTML = "&#10073;&#10073;";
   timer = setInterval(() => {

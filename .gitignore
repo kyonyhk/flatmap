@@ -13,3 +13,6 @@ data/interim/
 kits/
 
 .DS_Store
+
+# launch copy drafts (not for the public repo)
+launch/
